@@ -124,7 +124,7 @@ async def ssh_currentcon_check() -> None:
             else:
                 result_dict2[host] = 0
 
-
+# do the magic
 registry.register(nf_conntrack_max)
 registry.register(current_connections)
 asyncio.new_event_loop().run_until_complete(ssh_conntrack_check())
@@ -134,5 +134,5 @@ for host, state in result_dict.items():
 
 for host, state in result_dict2.items():
     current_connections.labels(host).set(state)
-
+# print prometheus metrics
 print(prom.generate_latest(registry).decode("utf-8"))
