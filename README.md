@@ -15,5 +15,5 @@ The reason why I use this is because I am to lazy to type in each command while 
 You can use environment variables aswell.
 There are plenty of ways to do this.
 
-I do not reccomend storing secrets at all as a file rather use a decentralized secret management service like Hashicorp Vault.
+I do not reccomend storing secrets at all as a file you should rather use a decentralized secret management service like Hashicorp Vault.
 
