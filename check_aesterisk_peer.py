@@ -111,10 +111,8 @@ async def ssh_peer_check() -> None:
     for peer in args.peers:
         template_command = "cat /etc/asterisk/peer_status.txt | grep "
         commands.append(template_command + "'" + peer + "'")
-        print(commands)
 
     for command in commands:
-        print(command)
         task = (run_client(args.host,
                            args.port,
                            args.user,
@@ -127,7 +125,6 @@ async def ssh_peer_check() -> None:
             result = (result_peer[1].stdout.strip(" "))
             result = " ".join(result.split())
             result = list(re.split(r'\s', result))
-            print(result[5])
             if result[5] == "OK":
                 result_dict[command] = 0
             else:
@@ -137,14 +134,11 @@ async def ssh_peer_check() -> None:
 try:
     registry.register(aesterisk_peer_check)
     result_dict = aio.run(ssh_peer_check())
-    print(result_dict)
     for v in result_dict:
-        print(v)
         peer = list(re.split(r'\s', v))
         peer = peer[4]
         aesterisk_peer_check.labels(args.host, peer).set(result_dict[v])
 except Exception as e:
-    print(e)
     aesterisk_peer_check.labels(args.host, "NULL").set(2)
 
 # print the prometheus metrics
