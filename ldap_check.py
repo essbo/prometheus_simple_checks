@@ -14,6 +14,7 @@
 # 4. Sicherstellen das Host zum Result passt.
 
 import argparse
+import ldap3
 import prometheus_client as prom
 import asyncssh as ssh
 import asyncio
@@ -23,7 +24,6 @@ import base64
 
 # initialize variables
 result_dict = {}
-result_dict2 = {}
 result_List = []
 
 # initialize custom Argument
@@ -35,6 +35,35 @@ def list_of_strings(arg):
 
 # parse arguments
 parser = argparse.ArgumentParser(description="Checks ldap connection")
+parser.add_argument("-S",
+                    "--server",
+                    help="The ldap server",
+                    default="localhost")
+
+parser.add_argument("-p",
+                    "--port",
+                    help="The ldap port",
+                    default=389)
+
+parser.add_argument("-b",
+                    "--base",
+                    help="The ldap base",
+                    )
+
+parser.add_argument("-u",
+                    "--user",
+                    help="The ldap user",
+                    )
+
+parser.add_argument("-P",
+                    "--password",
+                    help="The ldap password",
+                    )
+
+parser.add_argument("--ssh",
+                    help="Connect via ssh and do the tests",
+                    default=False,
+                    action="store_true")
 
 parser.add_argument("--sshuser",
                     help="The ssh user",
@@ -55,8 +84,9 @@ parser.add_argument("--sshport",
 parser.add_argument("--key",
                     help="The ssh key")
 
-parser.add_argument("--secret",
-                    help="The secret file")
+parser.add_argument("-s", "--secret",
+                    help="The secrets-file",
+                    type=str)
 
 args = parser.parse_args()
 
@@ -66,6 +96,11 @@ if args.secret:
         secret = rick.load(secret_input)
         secret = eval(base64.b64decode(secret))
         secret = dict(secret)
+        args.server = secret["server"]
+        args.port = secret["port"]
+        args.base = secret["base"]
+        args.user = secret["user"]
+        args.password = secret["password"]
         args.sshuser = secret["sshuser"]
         args.sshpassword = secret["sshpassword"]
         args.sshhosts = secret["sshhosts"]
@@ -75,17 +110,16 @@ if args.secret:
 
 # initialize prometheus metrics
 registry = prom.CollectorRegistry()
-nf_conntrack_max = prom.Gauge('max_connections',
-                              'Checks the max connections possible',
-                              ['host'])
+ldap_check = prom.Gauge('ldap_check',
+                        'Checks if ldap is reachable',
+                        ['server'])
 
-current_connections = prom.Gauge('current_connections',
-                                 'Checks if the current conntack connections',
-                                 ['host'])
+ldap_check2 = prom.Gauge('ldap_check2',
+                         'Checks if ldap is reachable via ssh',
+                         ['server', 'host'])
+
 
 # connect to ldap server
-
-
 async def run_client(host,
                      command: str) -> None:
     if args.key:
@@ -107,44 +141,51 @@ async def run_client(host,
             return await conn.run(command)
 
 
-async def ssh_conntrack_check() -> None:
+async def ssh_ldap_check() -> None:
     for host in args.sshhosts:
-        command = "cat /proc/sys/net/netfilter/nf_conntrack_max"
+        command = "spauthcli lsgroupsremote | grep white"
+
         task = (run_client(host,
                            command))
-        ssh_results = await asyncio.gather(task,
-                                           return_exceptions=True)
-        for ssh_conntrack in enumerate(ssh_results):
-            result = list(ssh_conntrack)
+
+        ldap_results = await asyncio.gather(task,
+                                            return_exceptions=True)
+
+        for result_ldap in enumerate(ldap_results):
+            result = list(result_ldap)
             if result[1].stderr == "" and result[1].stdout != "":
-                result_dict[host] = result[1].stdout
+                result_dict[host] = 1
+            elif result[1].returncode != 0:
+                result_dict[host] = 0
             else:
                 result_dict[host] = 0
 
+if args.ssh is False:
+    try:
+        registry.register(ldap_check)
+        server = ldap3.Server(args.server,
+                              port=args.port,
+                              get_info=ldap3.ALL)
 
-async def ssh_currentcon_check() -> None:
-    for host in args.sshhosts:
-        command = "cat /proc/sys/net/netfilter/nf_conntrack_count"
-        task = (run_client(host,
-                           command))
-        ssh_results = await asyncio.gather(task,
-                                           return_exceptions=True)
-        for ssh_conntrack in enumerate(ssh_results):
-            result = list(ssh_conntrack)
-            if result[1].stderr == "" and result[1].stdout != "":
-                result_dict2[host] = result[1].stdout
-            else:
-                result_dict2[host] = 0
+        conn = ldap3.Connection(server,
+                                args.user,
+                                args.password,
+                                auto_bind=True)
+
+        conn.search(args.base,
+                    '(memberOf=*)')
+
+        ldap_check.labels(args.server).set(1)
+
+    except Exception:
+        ldap_check.labels(args.server).set(0)
 
 
-registry.register(nf_conntrack_max)
-registry.register(current_connections)
-asyncio.new_event_loop().run_until_complete(ssh_conntrack_check())
-asyncio.new_event_loop().run_until_complete(ssh_currentcon_check())
-for host, state in result_dict.items():
-    nf_conntrack_max.labels(host).set(state)
+if args.ssh is True:
+    registry.register(ldap_check2)
+    asyncio.new_event_loop().run_until_complete(ssh_ldap_check())
 
-for host, state in result_dict2.items():
-    current_connections.labels(host).set(state)
-    
+    for host, state in result_dict.items():
+        ldap_check2.labels(args.server, host).set(state)
+
 print(prom.generate_latest(registry).decode("utf-8"))

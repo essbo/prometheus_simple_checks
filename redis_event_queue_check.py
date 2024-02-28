@@ -5,15 +5,12 @@
 # with the current queue size
 # This is useful for monitoring the redis event queue
 # It will export to a .prom file that can be read by prometheus-node-exporter
-# depending on the thresholds it will also print a critical or warning message
-
 
 import argparse
 import redis
 import sys
 import prometheus_client as prom
 import pickle as rick
-import re
 
 
 def list_of_strings(arg):
@@ -72,12 +69,8 @@ if args.secret:
     except Exception as e:
         print("CRITICAL: Could not load secret file: {}".format(e))
         sys.exit(2)
-# initialize variables
-qeue = {}
 
 # Initialize prometheus metrics
-
-registry = prom.CollectorRegistry()
 
 redis_queue_size = prom.Gauge("redis_queue_size",
                               "The size of the redis queue",
@@ -91,10 +84,6 @@ redis_queue_warning = prom.Gauge("redis_queue_warning",
                                  "The Warning threshold has been surpassed",
                                  ["queue"])
 
-registry.register(redis_queue_size)
-registry.register(redis_queue_critical)
-registry.register(redis_queue_warning)
-
 # Connect to redis
 try:
     redis = redis.Redis(host=args.host,
@@ -105,42 +94,22 @@ except Exception as e:
     sys.exit(2)
 
 # Print the metric
-if args.queue is None:
-    keys = redis.keys('*')
-    for key in keys:
-        key_type = redis.type(key)
-        if key_type == b'list':
-            try:
-                queue_size = redis.llen(key)
-            except Exception as e:
-                print("CRITICAL: Could not get queue size: {}".format(e))
-                sys.exit(2)
-            redis_queue_size.labels(key).set(queue_size)
-            if queue_size > args.critical:
-                redis_queue_critical.labels(key).set(1)
-            else:
-                redis_queue_critical.labels(key).set(0)
-            if queue_size > args.warning:
-                redis_queue_warning.labels(key).set(1)
-            else:
-                redis_queue_warning.labels(key).set(0)
-else:
-    for queue in args.queue:
-        try:
-            queue_size = redis.llen(queue)
-        except Exception as e:
-            print("CRITICAL: Could not get queue size: {}".format(e))
-            sys.exit(2)
-        redis_queue_size.labels(queue).set(queue_size)
-        if queue_size > args.critical:
-            redis_queue_critical.labels(queue).set(1)
-        else:
-            redis_queue_critical.labels(queue).set(0)
-        if queue_size > args.warning:
-            redis_queue_warning.labels(queue).set(1)
-        else:
-            redis_queue_warning.labels(queue).set(0)
+for queue in args.queue:
+    try:
+        queue_size = redis.llen(queue)
+    except Exception as e:
+        print("CRITICAL: Could not get queue size: {}".format(e))
+        sys.exit(2)
+    redis_queue_size.labels(queue).set(queue_size)
+    if queue_size > args.critical:
+        redis_queue_critical.labels(queue).set(1)
+    else:
+        redis_queue_critical.labels(queue).set(0)
+    if queue_size > args.warning:
+        redis_queue_warning.labels(queue).set(1)
+    else:
+        redis_queue_warning.labels(queue).set(0)
 
 
 # Print the prometheus metrics
-print(prom.generate_latest(registry).decode("utf-8"))
+print(prom.generate_latest(prom.REGISTRY).decode("utf-8"))

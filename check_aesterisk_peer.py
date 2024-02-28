@@ -14,7 +14,6 @@ import re
 result_dict = {}
 result_dict2 = {}
 result_List = []
-commands = []
 
 # initialize custom Argument
 
@@ -29,8 +28,7 @@ args = arg.ArgumentParser(description="Checks aesterisk peer connection")
 args.add_argument("-H",
                   "--host",
                   help="The host to check",
-                  type=str,
-                  required=True)
+                  type=str)
 
 args.add_argument("-p",
                   "--port",
@@ -62,11 +60,6 @@ args.add_argument("-s",
                   type=str,
                   default=None)
 
-args.add_argument("--peers",
-                  help="A set of peers to check - Comma seperated",
-                  type=list_of_strings,
-                  default=None)
-
 args = args.parse_args()
 
 # read secrets
@@ -80,12 +73,11 @@ if args.secret:
         args.user = secret["user"]
         args.password = secret["password"]
         args.key = secret["key"]
-        args.peers = secret["peer"]
 
 # initialize prometheus metrics
 registry = prom.CollectorRegistry()
 aesterisk_peer_check = prom.Gauge('aesterisk_peer_check',
-                                  'Checks aesterisk peers',
+                                  'Checks 2 aesterisk peers',
                                   ['host', 'peer'])
 
 
@@ -108,9 +100,8 @@ async def run_client(host, port, user, command: str) -> None:
 
 async def ssh_peer_check() -> None:
 
-    for peer in args.peers:
-        template_command = "cat /etc/asterisk/peer_status.txt | grep "
-        commands.append(template_command + "'" + peer + "'")
+    commands = ["cat /etc/asterisk/peer_status.txt | grep '041312401'",
+                "cat /etc/asterisk/peer_status.txt | grep 'potsdam'"]
 
     for command in commands:
         task = (run_client(args.host,
@@ -125,6 +116,7 @@ async def ssh_peer_check() -> None:
             result = (result_peer[1].stdout.strip(" "))
             result = " ".join(result.split())
             result = list(re.split(r'\s', result))
+            print(result[5])
             if result[5] == "OK":
                 result_dict[command] = 0
             else:
@@ -134,12 +126,15 @@ async def ssh_peer_check() -> None:
 try:
     registry.register(aesterisk_peer_check)
     result_dict = aio.run(ssh_peer_check())
+    print(result_dict)
     for v in result_dict:
+        print(v)
         peer = list(re.split(r'\s', v))
         peer = peer[4]
         aesterisk_peer_check.labels(args.host, peer).set(result_dict[v])
 except Exception as e:
+    print(e)
     aesterisk_peer_check.labels(args.host, "NULL").set(2)
-
+    
 # print the prometheus metrics
 print(prom.generate_latest(aesterisk_peer_check).decode("utf-8"))

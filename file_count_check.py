@@ -3,29 +3,29 @@
 import argparse as arg
 import subprocess as sub
 import prometheus_client as prom
+from time import sleep as sleep
 import os
 
-hostname = sub.check_output("/usr/bin/hostname",
-                            shell=True).decode("utf-8").strip()
+hostname = sub.check_output("/usr/bin/hostname", shell=True).decode("utf-8").strip()
 
 # Parse arguments
-args = arg.ArgumentParser(description="Checks Amount of Files in a Directory")
-args.add_argument("-d",
-                  "--directory",
-                  help="The directory to check",
-                  type=str)
+parser = arg.ArgumentParser(description="Checks Amount of Files inside a Directory")
+parser.add_argument("-d",
+                    "--directory",
+                    help="The directory to check",
+                    type=str)
 
-args.add_argument("-w",
-                  "--warning",
-                  help="The warning threshold",
-                  default=5000)
+parser.add_argument("-w",
+                    "--warning",
+                    help="The warning threshold",
+                    default=5000)
 
-args.add_argument("-c",
-                  "--critical",
-                  help="The critical threshold",
-                  default=10000)
+parser.add_argument("-c",
+                    "--critical",
+                    help="The critical threshold",
+                    default=10000)
 
-args = args.parse_args()
+args = parser.parse_args()
 
 # Initialize prometheus metrics
 registry = prom.CollectorRegistry()
