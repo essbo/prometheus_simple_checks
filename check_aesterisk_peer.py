@@ -100,8 +100,8 @@ async def run_client(host, port, user, command: str) -> None:
 
 async def ssh_peer_check() -> None:
 
-    commands = ["cat /etc/asterisk/peer_status.txt | grep '041312401'",
-                "cat /etc/asterisk/peer_status.txt | grep 'potsdam'"]
+    commands = ["cat /etc/asterisk/peer_status.txt | grep '1234'",
+                "cat /etc/asterisk/peer_status.txt | grep 'bielefeld'"]
 
     for command in commands:
         task = (run_client(args.host,
